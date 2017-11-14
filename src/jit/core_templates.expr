@@ -922,4 +922,3 @@
       (carg (tc) ptr)
       (carg (^spesh_slot_value $1) ptr)
       (carg $2 int)) ptr_sz))
-
