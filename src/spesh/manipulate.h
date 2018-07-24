@@ -7,5 +7,10 @@ void MVM_spesh_manipulate_remove_successor(MVMThreadContext *tc, MVMSpeshBB *bb,
 MVM_PUBLIC void MVM_spesh_manipulate_remove_handler_successors(MVMThreadContext *tc, MVMSpeshBB *bb);
 MVMSpeshOperand MVM_spesh_manipulate_get_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind);
 void MVM_spesh_manipulate_release_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMSpeshOperand temp);
+MVMuint16 MVM_spesh_manipulate_get_unique_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind);
+MVMuint16 MVM_spesh_manipulate_get_current_version(MVMThreadContext *tc, MVMSpeshGraph *g,
+        MVMuint16 orig);
+MVMuint16 MVM_spesh_manipulate_new_version(MVMThreadContext *tc, MVMSpeshGraph *g,
+        MVMuint16 orig);
 
 MVMSpeshBB *MVM_spesh_manipulate_split_BB_at(MVMThreadContext *tc, MVMSpeshGraph *g, MVMSpeshBB *bb, MVMSpeshIns *ins);

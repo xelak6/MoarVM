@@ -250,40 +250,7 @@ void MVM_spesh_manipulate_remove_handler_successors(MVMThreadContext *tc, MVMSpe
     bb->num_handler_succ = 0;
 }
 
-/* Gets a temporary register of the specified kind to use in some transform.
- * Will only actually extend the frame if needed; if an existing temporary
- * was requested and then released, then it will just use a new version of
- * that. */
-MVMSpeshOperand MVM_spesh_manipulate_get_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind) {
-    MVMSpeshOperand   result;
-    MVMSpeshFacts   **new_facts;
-    MVMuint16        *new_fact_counts;
-    MVMuint16         i;
-
-    /* First, see if we can find an existing free temporary; use it if so. */
-    for (i = 0; i < g->num_temps; i++) {
-        if (g->temps[i].kind == kind && !g->temps[i].in_use) {
-            /* Add new facts slot. */
-            MVMuint16 orig = g->temps[i].orig;
-            MVMSpeshFacts *new_fact_row = MVM_spesh_alloc(tc, g,
-                (g->fact_counts[orig] + 1) * sizeof(MVMSpeshFacts));
-            memcpy(new_fact_row, g->facts[orig],
-                g->fact_counts[orig] * sizeof(MVMSpeshFacts));
-            g->facts[orig] = new_fact_row;
-            g->fact_counts[orig]++;
-
-            /* Mark it in use and add extra version. */
-            g->temps[i].in_use++;
-            g->temps[i].i++;
-
-            /* Produce and return result. */
-            result.reg.orig = orig;
-            result.reg.i    = g->temps[i].i;
-            return result;
-        }
-    }
-
-    /* Make sure we've space in the temporaries store. */
+static void ensure_more_temps(MVMThreadContext *tc, MVMSpeshGraph *g) {
     if (g->num_temps == g->alloc_temps) {
         MVMSpeshTemporary *new_temps;
         g->alloc_temps += 4;
@@ -292,6 +259,46 @@ MVMSpeshOperand MVM_spesh_manipulate_get_temp_reg(MVMThreadContext *tc, MVMSpesh
             memcpy(new_temps, g->temps, g->num_temps * sizeof(MVMSpeshTemporary));
         g->temps = new_temps;
     }
+}
+
+/* Gets a temporary register of the specified kind to use in some transform.
+ * Will only actually extend the frame if needed; if an existing temporary
+ * was requested and then released, then it will just use a new version of
+ * that. */
+static MVMSpeshOperand make_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind,
+        MVMuint16 reuse) {
+    MVMSpeshOperand   result;
+    MVMSpeshFacts   **new_facts;
+    MVMuint16        *new_fact_counts;
+    MVMuint16         i;
+
+    /* First, see if we can find an existing free temporary; use it if so. */
+    if (reuse) {
+        for (i = 0; i < g->num_temps; i++) {
+            if (g->temps[i].kind == kind && !g->temps[i].in_use) {
+                /* Add new facts slot. */
+                MVMuint16 orig = g->temps[i].orig;
+                MVMSpeshFacts *new_fact_row = MVM_spesh_alloc(tc, g,
+                    (g->fact_counts[orig] + 1) * sizeof(MVMSpeshFacts));
+                memcpy(new_fact_row, g->facts[orig],
+                    g->fact_counts[orig] * sizeof(MVMSpeshFacts));
+                g->facts[orig] = new_fact_row;
+                g->fact_counts[orig]++;
+
+                /* Mark it in use and add extra version. */
+                g->temps[i].in_use++;
+                g->temps[i].i++;
+
+                /* Produce and return result. */
+                result.reg.orig = orig;
+                result.reg.i    = g->temps[i].i;
+                return result;
+            }
+        }
+    }
+
+    /* Make sure we've space in the temporaries store. */
+    ensure_more_temps(tc, g);
 
     /* Allocate temporary and set up result. */
     g->temps[g->num_temps].orig   = result.reg.orig = g->num_locals;
@@ -324,6 +331,9 @@ MVMSpeshOperand MVM_spesh_manipulate_get_temp_reg(MVMThreadContext *tc, MVMSpesh
 
     return result;
 }
+MVMSpeshOperand MVM_spesh_manipulate_get_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind) {
+    return make_temp_reg(tc, g, kind, 1);
+}
 
 /* Releases a temporary register, so it can be used again later. */
 void MVM_spesh_manipulate_release_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMSpeshOperand temp) {
@@ -340,6 +350,32 @@ void MVM_spesh_manipulate_release_temp_reg(MVMThreadContext *tc, MVMSpeshGraph *
     MVM_oops(tc, "Spesh: releasing non-existing temp");
 }
 
+/* Gets a frame-unique register, adding it to the set of registers of the
+ * frame. This does not hand back a particular version, it just selects the
+ * unversioned register. */
+MVMuint16 MVM_spesh_manipulate_get_unique_reg(MVMThreadContext *tc, MVMSpeshGraph *g, MVMuint16 kind) {
+    return make_temp_reg(tc, g, kind, 0).reg.orig;
+}
+
+/* Get the current version of an SSA temporary. */
+MVMuint16 MVM_spesh_manipulate_get_current_version(MVMThreadContext *tc, MVMSpeshGraph *g,
+        MVMuint16 orig) {
+    MVMuint32 i;
+    for (i = 0; i < g->num_temps; i++)
+        if (g->temps[i].orig == orig)
+            return g->temps[i].i;
+    MVM_oops(tc, "Could not find register version for %d", orig);
+}
+
+/* Create and return a new version of an SSA temporary. */
+MVMuint16 MVM_spesh_manipulate_new_version(MVMThreadContext *tc, MVMSpeshGraph *g,
+        MVMuint16 orig) {
+    MVMuint32 i;
+    for (i = 0; i < g->num_temps; i++)
+        if (g->temps[i].orig == orig)
+            return ++g->temps[i].i;
+    MVM_oops(tc, "Could not find register version for %d", orig);
+}
 
 MVMSpeshBB *MVM_spesh_manipulate_split_BB_at(MVMThreadContext *tc, MVMSpeshGraph *g, MVMSpeshBB *bb, MVMSpeshIns *ins) {
     MVMSpeshBB *new_bb = MVM_spesh_alloc(tc, g, sizeof(MVMSpeshBB));

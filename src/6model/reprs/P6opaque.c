@@ -1696,6 +1696,16 @@ size_t MVM_p6opaque_attr_offset(MVMThreadContext *tc, MVMObject *type,
     return repr_data->attribute_offsets[slot];
 }
 
+/* Gets the attribute index given we know the slot offset. */
+MVMuint32 MVM_p6opaque_offset_to_attr_idx(MVMThreadContext *tc, MVMObject *type, size_t offset) {
+    MVMP6opaqueREPRData *repr_data = (MVMP6opaqueREPRData *)type->st->REPR_data;
+    MVMuint32 i;
+    for (i = 0; i < repr_data->num_attributes; i++)
+        if (repr_data->attribute_offsets[i] == offset)
+            return i;
+    MVM_oops(tc, "P6opaque: slot offset not found");
+}
+
 #ifdef DEBUG_HELPERS
 /* This is meant to be called in a debugging session and not used anywhere else.
  * Plese don't delete. */

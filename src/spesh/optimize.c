@@ -2881,13 +2881,13 @@ void MVM_spesh_optimize(MVMThreadContext *tc, MVMSpeshGraph *g, MVMSpeshPlanned 
     eliminate_pointless_gotos(tc, g);
     MVM_spesh_usages_remove_unused_deopt(tc, g);
     eliminate_dead_ins(tc, g);
-
     merge_bbs(tc, g);
 
     /* Make a second pass through the graph doing things that are better
      * done after inlinings have taken place. Note that these things must not
      * add new fact dependencies. */
     second_pass(tc, g, g->entry);
+    MVM_spesh_pea(tc, g);
 #if MVM_SPESH_CHECK_DU
     MVM_spesh_usages_check(tc, g);
 #endif
